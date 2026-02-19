@@ -3,6 +3,7 @@
 
 #include "riscv.h"
 #include "types.h"
+#include "taskinfo.h"
 
 #define NPROC (16)
 
@@ -41,6 +42,8 @@ struct proc {
 	/*
 	* LAB1: you may need to add some new fields here
 	*/
+	unsigned int syscall_times[MAX_SYSCALL_NUM]; // the number of system calls used by the task
+	uint64 start_time; // process start time	
 };
 
 /*
