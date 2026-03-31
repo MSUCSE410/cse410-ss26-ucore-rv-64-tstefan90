@@ -8,6 +8,8 @@
 #define NPROC (512)
 #define FD_BUFFER_SIZE (16)
 
+#define MAX_SYSCALL_NUM 500
+
 struct file;
 
 // Saved registers for kernel context switches.
@@ -45,6 +47,10 @@ struct proc {
 	struct proc *parent; // Parent process
 	uint64 exit_code;
 	struct file *files[FD_BUFFER_SIZE];
+
+	unsigned int syscall_times[MAX_SYSCALL_NUM]; // the number of system calls used by the task
+	uint64 start_time; // process start time	
+
 };
 
 int cpuid();

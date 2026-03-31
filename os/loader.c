@@ -100,3 +100,21 @@ int load_init_app()
 	add_task(p);
 	return 0;
 }
+
+int run_all_app()
+{
+	for (int i = 0; i < app_num; ++i) {
+		struct proc *p = allocproc();
+		tracef("load app %d", i);
+		bin_loader(app_info_ptr[i], app_info_ptr[i + 1], p);
+		p->state = RUNNABLE;
+		/*
+		* LAB1: you may need to initialize your new fields of proc here
+		*/
+		for (int j = 0; j < MAX_SYSCALL_NUM; ++j) {
+			p->syscall_times[j] = 0;
+		}
+		p->start_time = get_cycle();
+	}
+	return 0;
+}

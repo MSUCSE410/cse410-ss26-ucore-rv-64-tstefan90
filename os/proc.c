@@ -32,6 +32,11 @@ void proc_init()
 		p->state = UNUSED;
 		p->kstack = (uint64)kstack[p - pool];
 		p->trapframe = (struct trapframe *)trapframe[p - pool];
+
+		p->start_time = 0;
+			for (int i = 0; i < MAX_SYSCALL_NUM; ++i) {
+				p->syscall_times[i] = 0;
+		}
 	}
 	idle.kstack = (uint64)boot_stack_top;
 	idle.pid = IDLE_PID;
