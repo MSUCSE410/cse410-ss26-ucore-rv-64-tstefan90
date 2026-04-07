@@ -5,6 +5,8 @@
 #include "vm.h"
 #include "queue.h"
 
+#define BIG_STRIDE 65536
+
 struct proc pool[NPROC];
 __attribute__((aligned(16))) char kstack[NPROC][PAGE_SIZE];
 __attribute__((aligned(4096))) char trapframe[NPROC][TRAP_PAGE_SIZE];
@@ -52,19 +54,38 @@ int allocpid()
 
 struct proc *fetch_task()
 {
-	int index = pop_queue(&task_queue);
-	if (index < 0) {
-		debugf("No task to fetch\n");
-		return NULL;
+
+	struct proc *lowest_stride = NULL;
+
+	for (int i = 0; i < NPROC; i++) 
+	{
+		struct proc *p = &pool[i];
+		if (p->state == RUNNABLE) {
+			if (lowest_stride == NULL || p->stride < lowest_stride->stride) {
+				lowest_stride = p;
+			}
+		}
 	}
-	debugf("fetch task %d(pid=%d) to task queue\n", index, pool[index].pid);
-	return pool + index;
+	if (lowest_stride != NULL) 
+	{
+		lowest_stride->stride += lowest_stride->pass;
+		return lowest_stride;
+	}
+	return NULL;
+
+	// int index = pop_queue(&task_queue);
+	// if (index < 0) {
+	// 	debugf("No task to fetch\n");
+	// 	return NULL;
+	// }
+	// debugf("fetch task %d(pid=%d) to task queue\n", index, pool[index].pid);
+	// return pool + index;
 }
 
 void add_task(struct proc *p)
 {
-	push_queue(&task_queue, p - pool);
-	debugf("add task %d(pid=%d) to task queue\n", p - pool, p->pid);
+	// push_queue(&task_queue, p - pool);
+	// debugf("add task %d(pid=%d) to task queue\n", p - pool, p->pid);
 }
 
 // Look in the process table for an UNUSED proc.
@@ -94,6 +115,10 @@ found:
 	memset((void *)p->trapframe, 0, TRAP_PAGE_SIZE);
 	p->context.ra = (uint64)usertrapret;
 	p->context.sp = p->kstack + KSTACK_SIZE;
+
+	p->stride = 0;
+	p->priority = 16;
+	p->pass = BIG_STRIDE / p->priority;
 	return p;
 }
 
@@ -191,6 +216,25 @@ int fork()
 	np->state = RUNNABLE;
 	add_task(np);
 	return np->pid;
+}
+
+int spawn(char *filename)
+{
+    int id = get_id_by_name(filename);
+    if (id < 0)
+        return -1;
+
+    struct proc *p = allocproc();
+
+    // Load program directly into child
+    loader(id, p);
+
+    p->parent = curr_proc();
+    p->state = RUNNABLE;
+
+    add_task(p);
+
+    return p->pid;
 }
 
 int exec(char *name)

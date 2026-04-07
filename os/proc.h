@@ -51,6 +51,10 @@ struct proc {
 	unsigned int syscall_times[MAX_SYSCALL_NUM]; // the number of system calls used by the task
 	uint64 start_time; // process start time	
 
+	uint64 pass;
+	uint64 stride;
+	int priority;
+
 };
 
 int cpuid();
@@ -61,6 +65,7 @@ void scheduler() __attribute__((noreturn));
 void sched();
 void yield();
 int fork();
+int spawn(char *);
 int exec(char *);
 int wait(int, int *);
 void add_task(struct proc *);

@@ -1,6 +1,7 @@
 #include "loader.h"
 #include "defs.h"
 #include "trap.h"
+#include "timer.h"
 
 static int app_num;
 static uint64 *app_info_ptr;

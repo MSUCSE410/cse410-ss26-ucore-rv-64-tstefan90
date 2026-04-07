@@ -7,6 +7,8 @@
 #include "trap.h"
 #include "taskinfo.h"
 
+#define BIG_STRIDE 65536
+
 uint64 sys_write(int fd, uint64 va, uint len)
 {
 	debugf("sys_write fd = %d str = %x, len = %d", fd, va, len);
@@ -65,13 +67,6 @@ uint64 sys_gettimeofday(TimeVal *val, int _tz) // TODO: implement sys_gettimeofd
 
 	return 0;
 }
-
-// TODO: add support for mmap and munmap syscall.
-// hint: read through docstrings in vm.c. Watching CH4 video may also help.
-// Note the return value and PTE flags (especially U,X,W,R)
-/*
-* LAB1: you may need to define sys_task_info here
-*/
 int sys_task_info(TaskInfo *ti)
 {
 	//find physical address of ti from current process's page table
@@ -112,7 +107,6 @@ int sys_task_info(TaskInfo *ti)
 
 	return 0;
 }
-
 uint64 sys_mmap(uint64 start, uint64 len, int port, int flag, int fd)
 {
 	if (len == 0) //if length is 0, return directly
@@ -188,7 +182,6 @@ uint64 sys_mmap(uint64 start, uint64 len, int port, int flag, int fd)
 	//return success if all error checks pass
 	return 0;
 }
-
 uint64 sys_munmap(uint64 start, uint64 len)
 {
 	//if len is 0, return diurectly
@@ -255,13 +248,23 @@ uint64 sys_wait(int pid, uint64 va)
 
 uint64 sys_spawn(uint64 va)
 {
-	// TODO: your job is to complete the sys call
-	return -1;
+	struct proc *p = curr_proc();
+	char name[200];
+	copyinstr(p->pagetable, name, va, 200);
+	debugf("sys_spawn %s\n", name);
+	return spawn(name);
 }
 
 uint64 sys_set_priority(long long prio){
     // TODO: your job is to complete the sys call
-    return -1;
+	struct proc *p = curr_proc();
+	if (prio < 2 || prio > __INT_MAX__) // check if priority is valid
+	{
+		return -1;
+	}
+	p->priority = prio;
+	p->pass = BIG_STRIDE / prio;
+    return prio;
 }
 
 
@@ -320,6 +323,9 @@ void syscall()
 		break;
 	case SYS_spawn:
 		ret = sys_spawn(args[0]);
+		break;
+	case SYS_setpriority:
+		ret = sys_set_priority(args[0]);
 		break;
 	default:
 		ret = -1;
