@@ -240,6 +240,112 @@ int sys_unlinkat(int dirfd, uint64 name, uint64 flags){
 	return -1;
 }
 
+uint64 sys_mmap(uint64 start, uint64 len, int port, int flag, int fd)
+{
+	if (len == 0) //if length is 0, return directly
+		return 0;
+	if (len > (1024 * 1024 * 1024))  // 1 GB upper limit
+    	return -1;
+ 
+
+	// 0x7 is 00000111
+	// if read, write, and execute perms are all 0, port is invalid
+	if ((port & 0x7) == 0) 
+		return -1;
+	// if the bits above the first 3 have values, port is invalid
+	if ((port & ~0x7) != 0)
+		return -1;
+
+	//ensure start is page aligned
+	//in other words, make sure the start of the virtual address is at the start of the page
+	if (start % PGSIZE != 0)
+		return -1;
+	
+
+	uint64 va = start;
+	//get the virtual end address of the mapping, round up the next page if needed
+	// since its page aligned
+	uint64 end = PGROUNDUP(start + len);
+
+	int perm = PTE_U; //start with user bit
+
+	// 0x1 = 00000001 - bit 0
+	if (port & 0x1) 
+		perm |= PTE_R; //add on read bit if port has it
+	// 0x2 = 00000010 - bit 1
+	if (port & 0x2) // add on write bit if port has it
+		perm |= PTE_W;
+	// 0x4 = 00000100 - bit 2
+	if (port & 0x4) //add on executable bit if port has it
+		perm |= PTE_X;
+
+	struct proc *p = curr_proc();
+
+	// iterate through pages to see if an address is already mapped
+	// if so, return with an error
+	for (uint64 add = va; add < end; add += PGSIZE) 
+	{
+		// walk the address in the current pagetable 
+		if (walkaddr(p->pagetable, add) != 0)
+    		return -1;
+	}
+
+	// map the pages
+	for (uint64 add = va; add < end; add += PGSIZE) 
+	{
+		//allocate one page in physical memory
+		// store the pointer in pa
+		void *pa = kalloc(); 
+
+		// if the pointer is null, return error
+		if (pa == 0) 
+			return -1;
+
+		//set an entire page to 0, clear leftover data
+		memset(pa, 0, PGSIZE);
+
+		// map pages using given function
+		int status = mappages(p->pagetable, add, PGSIZE, (uint64)pa, perm);
+
+		// if map pages failed, return error
+		if (status != 0)
+			return -1;
+	}
+
+	//return success if all error checks pass
+	return 0;
+}
+uint64 sys_munmap(uint64 start, uint64 len)
+{
+	//if len is 0, return diurectly
+	if (len == 0)
+        return 0;
+	if (len > (1024 * 1024 * 1024))  // 1 GB upper limit
+    	return -1;
+
+	//ensure start is page aligned
+    if (start % PGSIZE != 0)
+        return -1;
+
+    uint64 va  = start;
+    uint64 end = PGROUNDUP(start + len);
+
+    struct proc *p = curr_proc();
+
+	//make sure page is mapped before unmapping
+    for (uint64 a = va; a < end; a += PGSIZE) 
+	{
+        if (walkaddr(p->pagetable, a) == 0)
+            return -1;
+    }
+
+	//unmap using given function
+    uvmunmap(p->pagetable, va, (end - va) / PGSIZE, 1);
+
+	//return success
+    return 0;
+}
+
 extern char trap_page[];
 
 void syscall()
@@ -270,7 +376,7 @@ void syscall()
 		ret = sys_sched_yield();
 		break;
 	case SYS_gettimeofday:
-		ret = sys_gettimeofday(args[0], args[1]);
+		ret = sys_gettimeofday((TimeVal*)args[0], args[1]);
 		break;
 	case SYS_task_info:
 		ret = sys_task_info((TaskInfo *)args[0]);
@@ -306,6 +412,9 @@ void syscall()
 	    ret = sys_unlinkat(args[0],args[1],args[2]);
 	case SYS_spawn:
 		ret = sys_spawn(args[0]);
+		break;
+	case SYS_setpriority:
+		ret = sys_set_priority(args[0]);
 		break;
 	default:
 		ret = -1;

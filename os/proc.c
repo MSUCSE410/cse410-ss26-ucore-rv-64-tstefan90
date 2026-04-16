@@ -240,22 +240,19 @@ int fork()
 	add_task(np);
 	return np->pid;
 }
-int spawn(char *filename)
+int spawn(char *path, char **argv)
 {
-    int id = get_id_by_name(filename);
-	// if invalid filename
-    if (id < 0)
-        return -1;
+    //int id = get_id_by_name(filename);
 
-    struct proc *p;
-
-	// if resource error
-	if ((p = allocproc()) == 0) 
-	{
-		panic("allocproc\n");
+	infof("exec : %s\n", path);
+	struct inode *ip;
+	struct proc *p = curr_proc();
+	if ((ip = namei(path)) == 0) {
+		errorf("invalid file name %s\n", path);
+		return -1;
 	}
 
-    loader(id, p);
+    bin_loader(ip, p);
 
     p->parent = curr_proc();
     p->state = RUNNABLE;

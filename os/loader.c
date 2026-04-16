@@ -56,8 +56,6 @@ int bin_loader(struct inode *ip, struct proc *p)
 	return 0;
 }
 
-
-
 // load all apps and init the corresponding `proc` structure.
 int load_init_app()
 {
