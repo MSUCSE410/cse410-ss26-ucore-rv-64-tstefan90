@@ -37,6 +37,11 @@ void proc_init()
 		p->state = UNUSED;
 		p->kstack = (uint64)kstack[p - pool];
 		p->trapframe = (struct trapframe *)trapframe[p - pool];
+
+		p->start_time = 0;
+			for (int i = 0; i < MAX_SYSCALL_NUM; ++i) {
+				p->syscall_times[i] = 0;
+		}
 	}
 	idle.kstack = (uint64)boot_stack_top;
 	idle.pid = IDLE_PID;
@@ -52,20 +57,31 @@ int allocpid()
 
 struct proc *fetch_task()
 {
-	int index = pop_queue(&task_queue);
-	if (index < 0) {
-		debugf("No task to fetch\n");
-		return NULL;
+
+	struct proc *lowest_stride = NULL;
+
+	for (int i = 0; i < NPROC; i++) 
+	{
+		struct proc *p = &pool[i];
+		if (p->state == RUNNABLE) {
+			if (lowest_stride == NULL || p->stride < lowest_stride->stride) {
+				lowest_stride = p;
+			}
+		}
 	}
-	debugf("fetch task %d(pid=%d) from task queue\n", index,
-	       pool[index].pid);
-	return pool + index;
+	if (lowest_stride != NULL) 
+	{
+		//when scheduled
+		lowest_stride->stride += lowest_stride->pass;
+		return lowest_stride;
+	}
+	return NULL;
 }
 
 void add_task(struct proc *p)
 {
-	push_queue(&task_queue, p - pool);
-	debugf("add task %d(pid=%d) to task queue\n", p - pool, p->pid);
+	//push_queue(&task_queue, p - pool);
+	//debugf("add task %d(pid=%d) to task queue\n", p - pool, p->pid);
 }
 
 // Look in the process table for an UNUSED proc.
@@ -96,6 +112,11 @@ found:
 	memset((void *)p->files, 0, sizeof(struct file *) * FD_BUFFER_SIZE);
 	p->context.ra = (uint64)usertrapret;
 	p->context.sp = p->kstack + KSTACK_SIZE;
+
+	p->priority = 16;
+	p->pass = BIG_STRIDE / p->priority;
+	p->stride = 0;
+
 	return p;
 }
 
@@ -218,6 +239,30 @@ int fork()
 	np->state = RUNNABLE;
 	add_task(np);
 	return np->pid;
+}
+int spawn(char *filename)
+{
+    int id = get_id_by_name(filename);
+	// if invalid filename
+    if (id < 0)
+        return -1;
+
+    struct proc *p;
+
+	// if resource error
+	if ((p = allocproc()) == 0) 
+	{
+		panic("allocproc\n");
+	}
+
+    loader(id, p);
+
+    p->parent = curr_proc();
+    p->state = RUNNABLE;
+
+    add_task(p);
+
+    return p->pid;
 }
 
 int push_argv(struct proc *p, char **argv)

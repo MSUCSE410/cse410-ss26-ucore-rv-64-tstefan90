@@ -5,6 +5,7 @@
 #include "syscall_ids.h"
 #include "timer.h"
 #include "trap.h"
+#include "taskinfo.h"
 
 uint64 console_write(uint64 va, uint64 len)
 {
@@ -83,14 +84,61 @@ uint64 sys_sched_yield()
 	return 0;
 }
 
-uint64 sys_gettimeofday(uint64 val, int _tz)
+uint64 sys_gettimeofday(TimeVal *val, int _tz) // TODO: implement sys_gettimeofday in pagetable. (VA to PA)
 {
-	struct proc *p = curr_proc();
+	// get physical address of timeval from page table
+	uint64 pa = useraddr(curr_proc()->pagetable, (uint64)val);
+	// YOUR CODE
+	
+	// pointer to physical address of timeval
+	TimeVal *physical_time = (TimeVal*)pa;
+
+	// set values of timeval at physical address
 	uint64 cycle = get_cycle();
-	TimeVal t;
-	t.sec = cycle / CPU_FREQ;
-	t.usec = (cycle % CPU_FREQ) * 1000000 / CPU_FREQ;
-	copyout(p->pagetable, val, (char *)&t, sizeof(TimeVal));
+	physical_time->sec = cycle / CPU_FREQ;
+	physical_time->usec = (cycle % CPU_FREQ) * 1000000 / CPU_FREQ;
+
+	return 0;
+}
+
+int sys_task_info(TaskInfo *ti)
+{
+	//find physical address of ti from current process's page table
+	uint64 pa = useraddr(curr_proc()->pagetable, (uint64)ti);
+
+	// pointer to physical address of task
+	TaskInfo* physical_task = (TaskInfo*)pa;
+
+	struct proc *p = curr_proc();
+
+	// set values of taskinfo at physical address
+
+	// set process state
+	switch (p->state) {
+	case RUNNING:
+		physical_task->status = Running;
+		break;	
+	case RUNNABLE:
+		physical_task->status = Ready;
+		break;
+	case UNUSED:
+		physical_task->status = Exited;
+		break;
+	default:	
+		physical_task->status = UnInit;
+		break;
+	}	
+
+	// set syscall times at syscall id
+	for (int i = 0; i < MAX_SYSCALL_NUM; ++i)	
+		physical_task->syscall_times[i] = p->syscall_times[i];
+	
+
+	// set task info time
+	uint64 cycle = get_cycle();
+	
+	physical_task->time = (cycle - p->start_time) * 1000 / CPU_FREQ;
+
 	return 0;
 }
 
@@ -223,6 +271,15 @@ void syscall()
 		break;
 	case SYS_gettimeofday:
 		ret = sys_gettimeofday(args[0], args[1]);
+		break;
+	case SYS_task_info:
+		ret = sys_task_info((TaskInfo *)args[0]);
+		break;
+	case SYS_mmap:
+		ret = sys_mmap(args[0], args[1], args[2], args[3], args[4]);
+		break;
+	case SYS_munmap:
+		ret = sys_munmap(args[0], args[1]);
 		break;
 	case SYS_getpid:
 		ret = sys_getpid();
