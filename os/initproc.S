@@ -1,4 +1,4 @@
 
     .global INIT_PROC
 INIT_PROC:
-    .string "usershell"
+    .string "ch5_usertest"
