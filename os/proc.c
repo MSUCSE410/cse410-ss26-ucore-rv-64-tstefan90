@@ -68,6 +68,7 @@ struct proc *fetch_task()
 	}
 	if (lowest_stride != NULL) 
 	{
+		//when scheduled
 		lowest_stride->stride += lowest_stride->pass;
 		return lowest_stride;
 	}
@@ -116,9 +117,10 @@ found:
 	p->context.ra = (uint64)usertrapret;
 	p->context.sp = p->kstack + KSTACK_SIZE;
 
-	p->stride = 0;
 	p->priority = 16;
 	p->pass = BIG_STRIDE / p->priority;
+	p->stride = 0;
+
 	return p;
 }
 
@@ -221,12 +223,18 @@ int fork()
 int spawn(char *filename)
 {
     int id = get_id_by_name(filename);
+	// if invalid filename
     if (id < 0)
         return -1;
 
-    struct proc *p = allocproc();
+    struct proc *p;
 
-    // Load program directly into child
+	// if resource error
+	if ((p = allocproc()) == 0) 
+	{
+		panic("allocproc\n");
+	}
+
     loader(id, p);
 
     p->parent = curr_proc();
