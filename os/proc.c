@@ -240,28 +240,34 @@ int fork()
 	add_task(np);
 	return np->pid;
 }
-int spawn(char *path, char **argv)
+int spawn(char *path)
 {
-    //int id = get_id_by_name(filename);
+    struct inode *ip;
+    struct proc *np;
 
-	infof("exec : %s\n", path);
-	struct inode *ip;
-	struct proc *p = curr_proc();
-	if ((ip = namei(path)) == 0) {
-		errorf("invalid file name %s\n", path);
-		return -1;
-	}
+    if ((np = allocproc()) == 0)
+        return -1;
 
-    bin_loader(ip, p);
+    init_stdio(np);
 
-    p->parent = curr_proc();
-    p->state = RUNNABLE;
+    if ((ip = namei(path)) == 0) {
+        freeproc(np);
+        return -1;
+    }
 
-    add_task(p);
+    bin_loader(ip, np);
+    iput(ip);
 
-    return p->pid;
+    // no argv, set up empty args
+    np->trapframe->a0 = 0;  // argc = 0
+    np->trapframe->a1 = 0;  // argv = NULL
+
+    np->parent = curr_proc();
+    np->state = RUNNABLE;
+    add_task(np);
+
+    return np->pid;
 }
-
 int push_argv(struct proc *p, char **argv)
 {
 	uint64 argc, ustack[MAX_ARG_NUM + 1];

@@ -7,6 +7,8 @@
 #include "trap.h"
 #include "taskinfo.h"
 
+#include <unistd.h>
+
 uint64 console_write(uint64 va, uint64 len)
 {
 	struct proc *p = curr_proc();
@@ -190,28 +192,17 @@ uint64 sys_wait(int pid, uint64 va)
 	return wait(pid, code);
 }
 
-uint64 sys_spawn(uint64 path, uint64 uargv)
+uint64 sys_spawn(uint64 path)
 {
-	struct proc *p = curr_proc();
-	char name[MAX_STR_LEN];
-	if (copyinstr(p->pagetable, name, path, MAX_STR_LEN) != 0) {
-		return -1;
-	}
-	uint64 arg;
-	static char strpool[MAX_ARG_NUM][MAX_STR_LEN];
-	char *argv[MAX_ARG_NUM];
-	int i;
-	for (i = 0; uargv && (arg = fetchaddr(p->pagetable, uargv));
-	     uargv += sizeof(char *), i++) {
-		if (copyinstr(p->pagetable, (char *)strpool[i], arg, MAX_STR_LEN) != 0) {
-			return -1;
-		}
-		argv[i] = (char *)strpool[i];
-	}
-	argv[i] = NULL;
-	return spawn(name, (char **)argv);
-}
+    struct proc *p = curr_proc();
+    char name[MAX_STR_LEN];
 
+    if (copyinstr(p->pagetable, name, path, MAX_STR_LEN) != 0) {
+        return -1;
+    }
+
+    return spawn(name);
+}
 uint64 sys_set_priority(long long prio) 
 {
 	struct proc *p = curr_proc();
@@ -432,8 +423,9 @@ void syscall()
 		break;
 	case SYS_unlinkat:
 	    ret = sys_unlinkat(args[0],args[1],args[2]);
+		break;
 	case SYS_spawn:
-		ret = sys_spawn(args[0], args[1]);
+		ret = sys_spawn(args[0]);
 		break;
 	case SYS_setpriority:
 		ret = sys_set_priority(args[0]);
