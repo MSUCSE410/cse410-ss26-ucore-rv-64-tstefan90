@@ -6,6 +6,8 @@
 #include "timer.h"
 #include "trap.h"
 #include "taskinfo.h"
+#include "string.h"
+#include "fcntl.h"
 
 #include <unistd.h>
 
@@ -197,9 +199,7 @@ uint64 sys_spawn(uint64 path)
     struct proc *p = curr_proc();
     char name[MAX_STR_LEN];
 
-    if (copyinstr(p->pagetable, name, path, MAX_STR_LEN) != 0) {
-        return -1;
-    }
+    copyinstr(p->pagetable, name, path, MAX_STR_LEN);
 
     return spawn(name);
 }
@@ -238,19 +238,115 @@ uint64 sys_close(int fd)
 	return 0;
 }
 
-int sys_fstat(int fd,uint64 stat){
-	//TODO: your job is to complete the syscall
-	return -1;
+int sys_fstat(int fd,uint64 stat)
+{
+    if (fd < 0 || fd > FD_BUFFER_SIZE)
+        return -1;
+
+    struct proc *p = curr_proc();
+    struct file *f = p->files[fd];
+    if (f == NULL || f->type != FD_INODE)
+        return -1;
+
+    struct inode *ip = f->ip;
+    ivalid(ip);
+
+    struct Stat st;
+    st.dev   = 0;
+    st.ino   = ip->inum;
+    st.mode  = (ip->type == T_DIR) ? DIR : FILE;
+    st.nlink = ip->nlink;
+    memset(st.pad, 0, sizeof(st.pad));
+
+    // Write Stat struct back to user space VA
+    if (copyout(p->pagetable, stat, (char *)&st, sizeof(st)) < 0)
+        return -1;
+
+    return 0;
 }
 
-int sys_linkat(int olddirfd, uint64 oldpath, int newdirfd, uint64 newpath, uint64 flags){
-	//TODO: your job is to complete the syscall
-	return -1;
+int sys_linkat(int olddirfd, char *oldpath, int newdirfd, char *newpath, unsigned int flags)
+{
+    // olddirfd, newdirfd, flags ignored per spec
+
+    // Reject same-name link (only defined error case)
+    if (strncmp(oldpath, newpath, DIRSIZ) == 0)
+        return -1;
+
+    // Look up the existing file's inode
+    struct inode *ip = namei(oldpath);
+    if (ip == 0)
+        return -1;
+    ivalid(ip);
+
+    // Don't allow hard-linking directories
+    if (ip->type == T_DIR) {
+        iput(ip);
+        return -1;
+    }
+
+    // Add a new dirent in root_dir pointing to the same inode number
+    struct inode *dp = root_dir();
+    ivalid(dp);
+    if (dirlink(dp, newpath, ip->inum) < 0) {
+        iput(dp);
+        iput(ip);
+        return -1;
+    }
+    iput(dp);
+
+    // Increment nlink and write back to disk
+    ip->nlink++;
+    iupdate(ip);
+    iput(ip);
+    return 0;
 }
 
-int sys_unlinkat(int dirfd, uint64 name, uint64 flags){
-	//TODO: your job is to complete the syscall
-	return -1;
+int sys_unlinkat(int dirfd, uint64 name, uint64 flags)
+{
+    // dirfd and flags ignored per spec
+
+    // Copy the path string from user space (same pattern as sys_openat)
+    struct proc *p = curr_proc();
+    char path[200];
+    copyinstr(p->pagetable, path, name, 200);
+
+    // Get root directory inode
+    struct inode *dp = root_dir();
+    ivalid(dp);
+
+    // Find the dirent for this name, get its offset in the directory
+    uint off;
+    struct inode *ip = dirlookup(dp, path, &off);
+    if (ip == 0) {
+        iput(dp);
+        return -1;  // file does not exist
+    }
+    ivalid(ip);
+
+    // Zero out the dirent on disk to remove the directory entry
+    struct dirent de;
+    memset(&de, 0, sizeof(de));
+    if (writei(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de)) {
+        iput(ip);
+        iput(dp);
+        return -1;
+    }
+    iput(dp);
+
+    // Decrement link count and persist
+    ip->nlink--;
+    iupdate(ip);
+
+    // If no links remain, free all data blocks and mark inode free
+    if (ip->nlink == 0) {
+        itrunc(ip);
+        ip->type = 0;
+        iupdate(ip);
+    }
+
+    iput(ip);
+    return 0;
 }
 
 uint64 sys_mmap(uint64 start, uint64 len, int port, int flag, int fd)
@@ -369,6 +465,7 @@ void syscall()
 			   trapframe->a3, trapframe->a4, trapframe->a5 };
 	tracef("syscall %d args = [%x, %x, %x, %x, %x, %x]", id, args[0],
 	       args[1], args[2], args[3], args[4], args[5]);
+
 	switch (id) {
 	case SYS_write:
 		ret = sys_write(args[0], args[1], args[2]);
@@ -418,13 +515,20 @@ void syscall()
 	case SYS_fstat:
 	    ret = sys_fstat(args[0],args[1]);
 		break;
-	case SYS_linkat:
-	    ret = sys_linkat(args[0],args[1],args[2],args[3],args[4]);
+	case SYS_linkat: {
+		struct proc *p = curr_proc();
+		char oldpath[200];
+		char newpath[200];
+		copyinstr(p->pagetable, oldpath, args[1], 200);
+		copyinstr(p->pagetable, newpath, args[3], 200);
+		ret = sys_linkat(args[0], oldpath, args[2], newpath, args[4]);
 		break;
+}
 	case SYS_unlinkat:
 	    ret = sys_unlinkat(args[0],args[1],args[2]);
 		break;
 	case SYS_spawn:
+		console_putchar('S');
 		ret = sys_spawn(args[0]);
 		break;
 	case SYS_setpriority:

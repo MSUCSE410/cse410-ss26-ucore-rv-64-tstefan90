@@ -246,22 +246,20 @@ int spawn(char *path)
     struct proc *np;
 
     if ((np = allocproc()) == 0)
-        return -1;
-
-    init_stdio(np);
-
+	{
+		return -1;
+	}
+		
+	init_stdio(np);
     if ((ip = namei(path)) == 0) {
-        freeproc(np);
+		errorf("spawn: namei failed for %s\n", path);
         return -1;
     }
 
     bin_loader(ip, np);
     iput(ip);
 
-    // no argv, set up empty args
-    np->trapframe->a0 = 0;  // argc = 0
-    np->trapframe->a1 = 0;  // argv = NULL
-
+    np->trapframe->a0 = 0;  
     np->parent = curr_proc();
     np->state = RUNNABLE;
     add_task(np);

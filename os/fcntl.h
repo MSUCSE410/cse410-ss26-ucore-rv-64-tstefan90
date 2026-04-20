@@ -7,4 +7,15 @@
 #define O_CREATE 0x200
 #define O_TRUNC 0x400
 
+#define DIR  0x040000   // directory
+#define FILE 0x100000   // regular file
+
+struct Stat {
+    uint64 dev;
+    uint64 ino;
+    uint32 mode;
+    uint32 nlink;
+    uint64 pad[7];
+};
+
 #endif // FCNIL_H
