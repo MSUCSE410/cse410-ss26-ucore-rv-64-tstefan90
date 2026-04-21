@@ -143,6 +143,15 @@ found:
 	p->next_semaphore_id = 0;
 	p->next_condvar_id = 0;
 	// LAB5: (1) you may initialize your new proc variables here
+	
+	for (int i = 0; i < LOCK_POOL_SIZE; i++) {
+		p->available[i] = 0;
+		p->work[i] = p->available[i];
+		p->finish[i] = 0;
+	}
+
+	p->deadlock_detect_enabled = 0;
+
 	return p;
 }
 
