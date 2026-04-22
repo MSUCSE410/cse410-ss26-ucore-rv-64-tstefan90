@@ -67,13 +67,14 @@ struct proc {
 	//			 You may need a flag to record if detection enabled,
 	//       and some arrays for detection algorithm.
 
-	int available[LOCK_POOL_SIZE]; // available resources vector
-	int allocation[NPROC][LOCK_POOL_SIZE]; // allocation matrix
-	int request[NPROC][LOCK_POOL_SIZE]; // request matrix
+	int mutex_available[LOCK_POOL_SIZE]; // available resources vector
+	int mutex_allocation[NTHREAD][LOCK_POOL_SIZE]; // allocation matrix
+	int mutex_request[NTHREAD][LOCK_POOL_SIZE]; // request matrix
 	int deadlock_detect_enabled; // flag to indicate if deadlock detection is enabled
 
-	int work[LOCK_POOL_SIZE]; // work vector for deadlock detection
-	int finish[LOCK_POOL_SIZE]; // finish vector for deadlock detection
+	int semaphore_available[LOCK_POOL_SIZE]; // available resources vector
+	int semaphore_allocation[NTHREAD][LOCK_POOL_SIZE]; // allocation matrix
+	int semaphore_request[NTHREAD][LOCK_POOL_SIZE]; // request matrix
 };
 
 int cpuid();
